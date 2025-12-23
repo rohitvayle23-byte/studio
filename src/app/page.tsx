@@ -116,10 +116,7 @@ export default function Home() {
 
   return (
     <main className="flex flex-col items-center min-h-screen w-full p-4 sm:p-6 lg:p-8 overflow-hidden">
-      <header className="w-full max-w-md flex justify-between items-center mb-6 z-10">
-        <h1 className="text-2xl font-bold font-headline bg-gradient-to-r from-white to-accent text-transparent bg-clip-text">
-          Illumine
-        </h1>
+      <header className="w-full max-w-md flex justify-end items-center mb-6 z-10">
         <div className="flex items-center gap-2 text-lg font-medium p-2 rounded-lg bg-card/50 backdrop-blur-sm">
           {BatteryIcon}
           <span>{batteryLevel}%</span>
