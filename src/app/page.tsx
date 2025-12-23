@@ -1,19 +1,15 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Power,
   BatteryFull,
-  Sun,
   Lightbulb,
   Zap,
   AlertTriangle,
   Palette,
-  Bot,
-  Loader2,
   BatteryMedium,
-  BatteryLow,
-  WifiOff
+  BatteryLow
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -21,29 +17,13 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-
-import {
-  optimizeBrightness,
-  OptimizeBrightnessInput,
-  OptimizeBrightnessOutput,
-} from "@/ai/flows/optimize-brightness";
-import {
-  provideDistressSignal,
-  ProvideDistressSignalInput,
-  ProvideDistressSignalOutput,
-} from "@/ai/flows/provide-distress-signal";
 
 type Mode = "normal" | "strobe" | "sos";
 const COLORS = ["#FFFFFF", "#FF5C5C", "#FFD700", "#5C96FF"];
@@ -61,62 +41,14 @@ const sosPattern = [
 ];
 
 export default function Home() {
-  const [isMounted, setIsMounted] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [mode, setMode] = useState<Mode>("normal");
   const [color, setColor] = useState(COLORS[0]);
   const [strobeFrequency, setStrobeFrequency] = useState(5);
   const [batteryLevel, setBatteryLevel] = useState(80);
-  const [ambientLight, setAmbientLight] = useState(500);
-  const [userPreference, setUserPreference] = useState(70);
+  const [brightness, setBrightness] = useState(100);
   const [sosStep, setSosStep] = useState(0);
   const [isSosOn, setIsSosOn] = useState(false);
-
-  const [aiBrightness, setAiBrightness] =
-    useState<OptimizeBrightnessOutput | null>(null);
-  const [isOptimizing, setIsOptimizing] = useState(true);
-
-  const [distressSignal, setDistressSignal] =
-    useState<ProvideDistressSignalOutput | null>(null);
-  const [isGeneratingSignal, setIsGeneratingSignal] = useState(false);
-  const [location, setLocation] = useState("40.7128, -74.0060");
-  const [environment, setEnvironment] = useState("urban");
-
-  const { toast } = useToast();
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-  
-  const debouncedOptimizeBrightness = useCallback(async (input: OptimizeBrightnessInput) => {
-    setIsOptimizing(true);
-    try {
-      const result = await optimizeBrightness(input);
-      setAiBrightness(result);
-    } catch (error) {
-      console.error("Error optimizing brightness:", error);
-      toast({
-        variant: "destructive",
-        title: "AI Error",
-        description: "Could not get brightness optimization.",
-      });
-      setAiBrightness(null);
-    } finally {
-      setIsOptimizing(false);
-    }
-  }, [toast]);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      debouncedOptimizeBrightness({
-        ambientLightLevel: ambientLight,
-        currentBatteryPercentage: batteryLevel,
-        userBrightnessPreference: userPreference,
-      });
-    }, 500);
-
-    return () => clearTimeout(handler);
-  }, [ambientLight, batteryLevel, userPreference, debouncedOptimizeBrightness]);
 
   useEffect(() => {
     if (mode !== 'sos' || !torchOn) {
@@ -132,25 +64,6 @@ export default function Home() {
     return () => clearTimeout(timeoutId);
   }, [torchOn, mode, sosStep]);
 
-  const handleGenerateSignal = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsGeneratingSignal(true);
-    setDistressSignal(null);
-    try {
-      const result = await provideDistressSignal({ location, environment });
-      setDistressSignal(result);
-    } catch (error) {
-      console.error("Error generating signal:", error);
-      toast({
-        variant: "destructive",
-        title: "AI Error",
-        description: "Could not generate distress signal.",
-      });
-    } finally {
-      setIsGeneratingSignal(false);
-    }
-  };
-
   const currentStrobeDuration = useMemo(
     () => (11 - strobeFrequency) * 0.1,
     [strobeFrequency]
@@ -164,11 +77,24 @@ export default function Home() {
 
   const torchGlow = useMemo(() => {
     if (!isLightVisible) return {};
+    const glowOpacity = brightness / 100;
     return {
-      boxShadow: `0 0 80px 20px ${color}, 0 0 120px 40px ${color}33`,
+      boxShadow: `0 0 ${80 * glowOpacity}px ${20 * glowOpacity}px ${color}, 0 0 ${120 * glowOpacity}px ${40 * glowOpacity}px ${color}33`,
       backgroundColor: color,
+      opacity: glowOpacity
     };
-  }, [isLightVisible, color]);
+  }, [isLightVisible, color, brightness]);
+  
+  const torchWrapperStyle = useMemo(() => {
+    if (!isLightVisible) return { opacity: 0.1 };
+     if (mode === 'strobe') {
+        return {
+            opacity: 1,
+            '--strobe-duration': `${currentStrobeDuration}s`,
+        } as React.CSSProperties
+     }
+    return { opacity: brightness / 100 };
+  }, [isLightVisible, mode, brightness, currentStrobeDuration]);
 
   const BatteryIcon = useMemo(() => {
     if (batteryLevel > 75) return <BatteryFull className="text-accent" />;
@@ -176,19 +102,11 @@ export default function Home() {
     return <BatteryLow className="text-red-500" />;
   }, [batteryLevel]);
 
-  if (!isMounted) {
-    return (
-      <div className="flex min-h-screen w-full items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-accent" />
-      </div>
-    );
-  }
-
   return (
     <main className="flex flex-col items-center min-h-screen w-full p-4 sm:p-6 lg:p-8 overflow-hidden">
       <header className="w-full max-w-md flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold font-headline bg-gradient-to-r from-white to-accent text-transparent bg-clip-text">
-          IllumineAI
+          Illumine
         </h1>
         <div className="flex items-center gap-2 text-lg font-medium">
           {BatteryIcon}
@@ -201,8 +119,7 @@ export default function Home() {
           className={`relative w-48 h-48 sm:w-56 sm:h-56 rounded-full transition-all duration-500 ${mode === 'strobe' && isLightVisible ? 'animate-strobe' : ''}`}
           style={{
             ...torchGlow,
-            opacity: isLightVisible ? 1 : 0.1,
-            '--strobe-duration': `${currentStrobeDuration}s`,
+            ...torchWrapperStyle
           } as React.CSSProperties}
         />
       </div>
@@ -226,55 +143,17 @@ export default function Home() {
           <TabsContent value="normal" className="mt-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Bot /> AI Brightness</CardTitle>
-                <CardDescription>
-                  Dynamically adjusts brightness for visibility and battery life.
-                </CardDescription>
+                <CardTitle className="flex items-center gap-2">Manual Control</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="ambient" className="flex items-center gap-2"><Sun size={16}/> Ambient Light: {ambientLight} lux</Label>
-                  <Slider id="ambient" value={[ambientLight]} onValueChange={([v]) => setAmbientLight(v)} max={2000} step={50} />
+                  <Label htmlFor="brightness" className="flex items-center gap-2"><Lightbulb size={16}/> Flashlight Brightness: {brightness}%</Label>
+                  <Slider id="brightness" value={[brightness]} onValueChange={([v]) => setBrightness(v)} max={100} step={1} />
                 </div>
-                <div className="space-y-2">
+                 <div className="space-y-2">
                   <Label htmlFor="battery" className="flex items-center gap-2"><BatteryFull size={16}/> Battery Level: {batteryLevel}%</Label>
                   <Slider id="battery" value={[batteryLevel]} onValueChange={([v]) => setBatteryLevel(v)} max={100} step={1} />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="preference" className="flex items-center gap-2"><Lightbulb size={16}/> User Preference: {userPreference}%</Label>
-                  <Slider id="preference" value={[userPreference]} onValueChange={([v]) => setUserPreference(v)} max={100} step={1} />
-                </div>
-                 {isOptimizing ? (
-                    <div className="flex items-center justify-center p-4">
-                        <Loader2 className="h-6 w-6 animate-spin text-accent" />
-                        <span className="ml-2">AI is thinking...</span>
-                    </div>
-                ) : aiBrightness ? (
-                  <Card className="bg-background/50">
-                    <CardHeader>
-                        <CardTitle className="text-base">AI Recommendation</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                         <div>
-                            <Label>Screen Brightness: {aiBrightness.screenBrightness}%</Label>
-                            <Progress value={aiBrightness.screenBrightness} className="h-2 mt-1" />
-                        </div>
-                        <div>
-                            <Label>Flashlight Strength: {aiBrightness.flashlightStrength}%</Label>
-                            <Progress value={aiBrightness.flashlightStrength} className="h-2 mt-1" />
-                        </div>
-                    </CardContent>
-                    <CardFooter>
-                        <CardDescription>{aiBrightness.reasoning}</CardDescription>
-                    </CardFooter>
-                  </Card>
-                ) : (
-                    <Alert variant="destructive">
-                        <WifiOff className="h-4 w-4" />
-                        <AlertTitle>Connection Error</AlertTitle>
-                        <AlertDescription>The AI assistant is currently unavailable.</AlertDescription>
-                    </Alert>
-                )}
                 <Separator />
                 <div>
                    <Label className="flex items-center gap-2 mb-4"><Palette size={16}/> Color Filter</Label>
@@ -316,39 +195,13 @@ export default function Home() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><AlertTriangle/> Emergency Signal</CardTitle>
                  <CardDescription>
-                  Activate an SOS signal or generate a location-specific distress pattern.
+                  Activate a standard SOS signal. The light will blink in the universal SOS pattern (...---...).
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleGenerateSignal} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="location">Location (Lat, Long)</Label>
-                    <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="environment">Environment</Label>
-                    <Input id="environment" value={environment} onChange={(e) => setEnvironment(e.target.value)} placeholder="e.g., mountain, sea, urban" />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isGeneratingSignal}>
-                    {isGeneratingSignal && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Generate Distress Signal
-                  </Button>
-                </form>
-
-                {isGeneratingSignal && (
-                    <div className="flex items-center justify-center p-4 mt-4">
-                        <Loader2 className="h-6 w-6 animate-spin text-accent" />
-                        <span className="ml-2">AI is determining signal...</span>
-                    </div>
-                )}
-                
-                {distressSignal && (
-                  <Alert className="mt-4">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>{distressSignal.signalPattern}</AlertTitle>
-                    <AlertDescription>{distressSignal.signalDescription}</AlertDescription>
-                  </Alert>
-                )}
+                <p className="text-sm text-muted-foreground">
+                    When SOS mode is active and the torch is on, it will automatically flash the SOS signal.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>

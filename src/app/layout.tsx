@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'IllumineAI',
-  description: 'An AI-powered torch application for optimal visibility and battery life.',
+  title: 'Illumine',
+  description: 'A simple torch application.',
 };
 
 export default function RootLayout({
